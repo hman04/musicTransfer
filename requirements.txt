@@ -1,0 +1,8 @@
+flask
+requests
+ytmusicapi
+google-auth-oauthlib
+redis
+celery
+beautifulsoup4
+gunicorn 

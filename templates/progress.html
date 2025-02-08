@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transfer Progress</title>
+    <script>
+        function updateProgress() {
+            fetch('/progress')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('progress').innerHTML = 
+                        `Transferred ${data.current} of ${data.total} tracks`;
+                });
+        }
+        setInterval(updateProgress, 1000);
+    </script>
+</head>
+<body>
+    <h1>Transfer Progress</h1>
+    <div id="progress">Starting transfer...</div>
+</body>
+</html> 

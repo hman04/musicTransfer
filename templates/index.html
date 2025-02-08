@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Spotify to YouTube Music Transfer</title>
+    <style>
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+        .track {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f5f5f5;
+        }
+        #createPlaylistBtn {
+            display: none;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #1DB954;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #createPlaylistBtn:hover {
+            background-color: #1ed760;
+        }
+        .progress-container {
+            display: none;
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #1DB954;
+            width: 0%;
+            transition: width 0.5s ease-in-out;
+        }
+        .progress-stats {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .progress-status {
+            margin-top: 5px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>Transfer Spotify Playlist to YouTube Music</h1>
+    
+    <form id="transferForm">
+        <input type="text" name="spotify_url" placeholder="Enter Spotify playlist URL" required>
+        <button type="submit">Preview Transfer</button>
+    </form>
+
+    <div id="results" class="results" style="display: none;">
+        <h2>Preview Results</h2>
+        <div id="matchedTracks"></div>
+        <button id="createPlaylistBtn" onclick="createPlaylist()">Create YouTube Music Playlist</button>
+    </div>
+
+    <div id="progressContainer" class="progress-container">
+        <h3>Transfer Progress</h3>
+        <div class="progress-bar">
+            <div id="progressFill" class="progress-fill"></div>
+        </div>
+        <div id="progressStats" class="progress-stats"></div>
+        <div id="progressStatus" class="progress-status"></div>
+    </div>
+
+    <script>
+        let currentSpotifyUrl = '';
+        let progressInterval;
+
+        document.getElementById('transferForm').onsubmit = function(e) {
+            e.preventDefault();
+            
+            const url = document.querySelector('input[name="spotify_url"]').value;
+            currentSpotifyUrl = url;
+            
+            fetch('/transfer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'spotify_url=' + encodeURIComponent(url)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                document.getElementById('results').style.display = 'block';
+                const tracksDiv = document.getElementById('matchedTracks');
+                tracksDiv.innerHTML = `<p>Found ${data.total_tracks} tracks in playlist. Preview of first 5 matches:</p>`;
+                
+                data.preview_results.forEach(result => {
+                    const trackDiv = document.createElement('div');
+                    trackDiv.className = 'track';
+                    trackDiv.innerHTML = `
+                        <p><strong>Spotify:</strong> ${result.spotify_track.name} - ${result.spotify_track.artists.join(', ')}</p>
+                        <p><strong>YouTube Music Match:</strong> ${result.youtube_track.title} - ${result.youtube_track.artists[0].name}</p>
+                    `;
+                    tracksDiv.appendChild(trackDiv);
+                });
+                
+                document.getElementById('createPlaylistBtn').style.display = 'block';
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            });
+        };
+
+        function updateProgress() {
+            fetch('/progress')
+                .then(response => response.json())
+                .then(data => {
+                    const percent = (data.current / data.total) * 100;
+                    document.getElementById('progressFill').style.width = `${percent}%`;
+                    document.getElementById('progressStats').innerHTML = 
+                        `Processed ${data.current} of ${data.total} tracks<br>` +
+                        `✓ Successful: ${data.successful}<br>` +
+                        `✗ Failed: ${data.failed}`;
+                    document.getElementById('progressStatus').textContent = data.status;
+                    
+                    if (data.status === 'Complete!') {
+                        clearInterval(progressInterval);
+                    }
+                });
+        }
+
+        function createPlaylist() {
+            if (!currentSpotifyUrl) {
+                alert('Please preview the transfer first');
+                return;
+            }
+            
+            const confirmMessage = 
+                "Important:\n\n" +
+                "1. This process will take 15-30 minutes for 1922 songs\n" +
+                "2. Please keep this window open until completion\n" +
+                "3. Closing the window will interrupt the transfer\n\n" +
+                "Would you like to continue?";
+                
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            // Show progress container
+            document.getElementById('progressContainer').style.display = 'block';
+            
+            // Start progress updates
+            progressInterval = setInterval(updateProgress, 1000);
+            
+            fetch('/create_playlist', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'spotify_url=' + encodeURIComponent(currentSpotifyUrl)
+            })
+            .then(response => response.json())
+            .then(data => {
+                clearInterval(progressInterval);
+                
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                    return;
+                }
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                alert(
+                    `Playlist "${data.details.playlist_name}" created successfully!\n\n` +
+                    `✓ Successfully transferred: ${data.details.successful_transfers} tracks\n` +
+                    `✗ Failed to transfer: ${data.details.failed_transfers} tracks\n` +
+                    `Total tracks processed: ${data.details.total_tracks}\n\n` +
+                    `Check your YouTube Music playlists to see the imported songs!`
+                );
+            })
+            .catch(error => {
+                clearInterval(progressInterval);
+                alert('Error: ' + error);
+            });
+        }
+    </script>
+</body>
+</html> 
