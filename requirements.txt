@@ -2,8 +2,12 @@ flask
 requests
 ytmusicapi
 google-auth-oauthlib
-redis
+redis==5.0.1
 celery
 beautifulsoup4
-gunicorn
-aiohttp==3.9.1 
+gunicorn==21.2.0
+aiohttp==3.9.1
+Flask-Limiter==3.5.0
+Flask-Caching==2.1.0
+Werkzeug==3.0.1
+limits==3.7.0 
