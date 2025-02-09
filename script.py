@@ -233,45 +233,57 @@ def progress():
 
 @app.route('/login')
 def login():
-    flow = Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE,
-        scopes=SCOPES,
-        redirect_uri=GOOGLE_REDIRECT_URI
-    )
-    
-    authorization_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true'
-    )
-    
-    session['state'] = state
-    return redirect(authorization_url)
+    try:
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRETS_FILE,
+            scopes=SCOPES,
+            redirect_uri='https://musictransfer.onrender.com/oauth2callback'  # Updated!
+        )
+        
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true'
+        )
+        
+        session['state'] = state
+        return redirect(authorization_url)
+        
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        return "Error during login. Please try again."
 
 @app.route('/oauth2callback')
 def oauth2callback():
-    state = session['state']
-    
-    flow = Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE,
-        scopes=SCOPES,
-        state=state,
-        redirect_uri=GOOGLE_REDIRECT_URI
-    )
-    
-    authorization_response = request.url
-    flow.fetch_token(authorization_response=authorization_response)
-    credentials = flow.credentials
-    
-    session['credentials'] = {
-        'token': credentials.token,
-        'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes
-    }
-    
-    return redirect('/create_playlist')
+    try:
+        state = request.args.get('state', '')
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRETS_FILE,
+            scopes=SCOPES,
+            state=state,
+            redirect_uri='https://musictransfer.onrender.com/oauth2callback'  # Updated!
+        )
+        
+        authorization_response = request.url
+        if request.headers.get('X-Forwarded-Proto') == 'https':
+            authorization_response = authorization_response.replace('http:', 'https:')
+            
+        flow.fetch_token(authorization_response=authorization_response)
+        credentials = flow.credentials
+        
+        session['credentials'] = {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+        
+        return redirect('/')
+        
+    except Exception as e:
+        print(f"OAuth callback error: {str(e)}")
+        return redirect('/login')
 
 @app.route('/create_playlist', methods=['GET', 'POST'])
 def create_playlist():
