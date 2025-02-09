@@ -13,6 +13,7 @@ from google.oauth2.credentials import Credentials
 import os
 from celery_worker import process_playlist
 from redis import Redis
+from celery import Celery
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
@@ -34,9 +35,12 @@ SCOPES = [
 ]
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Only for development
 
-# Initialize Redis with URL from environment
-redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
-redis_client = Redis.from_url(redis_url)
+# Get Redis URL from environment variable
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
+
+# Initialize Redis and Celery with the URL
+redis_client = Redis.from_url(REDIS_URL)
+celery = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL)
 
 class SpotifyScraperException(Exception):
     pass

@@ -1,10 +1,14 @@
+import os
 from celery import Celery
 from ytmusicapi import YTMusic
 import time
 import json
 
-# Initialize Celery
-celery = Celery('tasks', broker='redis://localhost:6379/0')
+# Get Redis URL from environment
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
+
+# Initialize Celery with Redis URL
+celery = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL)
 
 @celery.task
 def process_playlist(playlist_id, tracks, auth_headers):
