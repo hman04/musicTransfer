@@ -296,12 +296,17 @@ def create_playlist():
         return jsonify({'redirect': '/login'})
         
     try:
+        print("Starting playlist creation...")  # Debug log
+        
         # Get the tracks from Spotify
         spotify_url = request.form['spotify_url']
         tracks = get_spotify_playlist_tracks(spotify_url)
         
         if not tracks:
+            print("No tracks found in Spotify playlist")  # Debug log
             return jsonify({'error': 'No tracks found'})
+        
+        print(f"Found {len(tracks)} tracks in Spotify playlist")  # Debug log
         
         # Initialize YTMusic with OAuth credentials
         credentials = Credentials(**session['credentials'])
@@ -310,14 +315,17 @@ def create_playlist():
             'accept': 'application/json'
         }
         ytmusic = YTMusic(auth=headers)
+        print("YTMusic initialized successfully")  # Debug log
         
         # Create a new playlist
         playlist_name = f"Spotify Import - {len(tracks)} tracks"
         playlist_description = "Imported from Spotify"
         playlist_id = ytmusic.create_playlist(playlist_name, playlist_description)
+        print(f"Created YouTube Music playlist: {playlist_id}")  # Debug log
         
         # Start background task
         process_playlist.delay(playlist_id, tracks, headers)
+        print("Background task started")  # Debug log
         
         return jsonify({
             'success': True,
@@ -326,7 +334,7 @@ def create_playlist():
         })
         
     except Exception as e:
-        print(f"Error in create_playlist: {str(e)}")
+        print(f"Error in create_playlist: {str(e)}")  # Debug log
         if 'unauthorized' in str(e).lower():
             session.pop('credentials', None)
             return jsonify({'redirect': '/login'})
