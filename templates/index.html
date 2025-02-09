@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spotify to YouTube Music Transfer</title>
+    <title>Music Transfer</title>
     
     <!-- Mobile icons -->
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
@@ -11,6 +11,24 @@
     
     <!-- Mobile-friendly CSS -->
     <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 600px;
+        }
         @media (max-width: 768px) {
             .container {
                 width: 95%;
@@ -84,26 +102,28 @@
     </style>
 </head>
 <body>
-    <h1>Transfer Spotify Playlist to YouTube Music</h1>
-    
-    <form id="transferForm">
-        <input type="text" name="spotify_url" placeholder="Enter Spotify playlist URL" required>
-        <button type="submit">Preview Transfer</button>
-    </form>
+    <div class="container">
+        <h1>Transfer Spotify Playlist to YouTube Music</h1>
+        
+        <form id="transferForm">
+            <input type="text" name="spotify_url" placeholder="Enter Spotify playlist URL" required>
+            <button type="submit">Preview Transfer</button>
+        </form>
 
-    <div id="results" class="results" style="display: none;">
-        <h2>Preview Results</h2>
-        <div id="matchedTracks"></div>
-        <button id="createPlaylistBtn" onclick="createPlaylist()">Create YouTube Music Playlist</button>
-    </div>
-
-    <div id="progressContainer" class="progress-container">
-        <h3>Transfer Progress</h3>
-        <div class="progress-bar">
-            <div id="progressFill" class="progress-fill"></div>
+        <div id="results" class="results" style="display: none;">
+            <h2>Preview Results</h2>
+            <div id="matchedTracks"></div>
+            <button id="createPlaylistBtn" onclick="createPlaylist()">Create YouTube Music Playlist</button>
         </div>
-        <div id="progressStats" class="progress-stats"></div>
-        <div id="progressStatus" class="progress-status"></div>
+
+        <div id="progressContainer" class="progress-container">
+            <h3>Transfer Progress</h3>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <div id="progressStats" class="progress-stats"></div>
+            <div id="progressStatus" class="progress-status"></div>
+        </div>
     </div>
 
     <script>
