@@ -22,4 +22,18 @@ services:
     ipAllowList:
       - source: 0.0.0.0/0
         description: everywhere
-    plan: starter 
+    plan: starter
+
+  - type: web
+    name: musictransfer-frontend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+      targetMemoryPercent: 80
+      targetCPUPercent: 80 
