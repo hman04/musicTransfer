@@ -1,5 +1,6 @@
 'use client'
 
+import React, { useState } from 'react'
 import {
   Box,
   Container,
@@ -15,11 +16,10 @@ import {
   CardBody,
   useToast,
 } from '@chakra-ui/react'
-import { useState } from 'react'
 import { FaSpotify, FaYoutube } from 'react-icons/fa'
 
 const BACKEND_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://musictransfer.onrender.com' 
+  ? 'https://music-transfer-backend.onrender.com' 
   : 'http://localhost:5001'
 
 export default function Home() {
@@ -60,10 +60,10 @@ export default function Home() {
         duration: 5000,
         isClosable: true,
       })
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to start transfer',
+        description: error.message || 'Failed to start transfer',
         status: 'error',
         duration: 5000,
         isClosable: true,
