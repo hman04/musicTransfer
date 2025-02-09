@@ -42,6 +42,9 @@ REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
 redis_client = Redis.from_url(REDIS_URL)
 celery = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL)
 
+# Global dictionary to store transfer status
+transfer_status = {}
+
 class SpotifyScraperException(Exception):
     pass
 
@@ -290,50 +293,14 @@ def oauth2callback():
         print(f"OAuth callback error: {str(e)}")
         return redirect('/login')
 
-@app.route('/create_playlist', methods=['GET', 'POST'])
-def create_playlist():
-    if request.method == 'GET':
-        if 'credentials' not in session:
-            return redirect('/login')
-        return redirect('/')
-        
-    if 'credentials' not in session:
-        return jsonify({'redirect': '/login'})
-        
+def process_playlist_in_background(playlist_id, tracks, auth_token):
     try:
-        print("Starting playlist creation...")
-        
-        # Get the tracks from Spotify
-        spotify_url = request.form['spotify_url']
-        tracks = get_spotify_playlist_tracks(spotify_url)
-        
-        if not tracks:
-            return jsonify({'error': 'No tracks found'})
-            
-        print(f"Found {len(tracks)} tracks in Spotify playlist")
-        
-        # Initialize YTMusic with proper OAuth
-        credentials = Credentials(**session['credentials'])
-        headers = {
-            'Authorization': f'Bearer {credentials.token}',
-            'accept': 'application/json',
-            'Content-Type': 'application/json'
-        }
-        
-        # Create auth object for YTMusic
+        # Initialize YTMusic
         auth = {
-            'Authorization': f'Bearer {credentials.token}'
+            'Authorization': f'Bearer {auth_token}'
         }
         ytmusic = YTMusic(auth=auth)
-        print("YTMusic initialized successfully")
         
-        # Create playlist
-        playlist_name = f"Spotify Import - {time.strftime('%Y-%m-%d %H:%M')}"
-        playlist_description = "Imported from Spotify"
-        playlist_id = ytmusic.create_playlist(playlist_name, playlist_description)
-        print(f"Created playlist: {playlist_id}")
-        
-        # Add tracks
         successful_transfers = 0
         failed_transfers = 0
         
@@ -348,6 +315,16 @@ def create_playlist():
                     print(f"Adding track: {search_query} ({video_id})")
                     ytmusic.add_playlist_items(playlist_id, [video_id])
                     successful_transfers += 1
+                    
+                    # Update status
+                    transfer_status[playlist_id] = {
+                        'current': successful_transfers + failed_transfers,
+                        'total': len(tracks),
+                        'successful': successful_transfers,
+                        'failed': failed_transfers,
+                        'complete': False
+                    }
+                    
                     time.sleep(1)  # Avoid rate limiting
                 else:
                     print(f"No results found for: {search_query}")
@@ -356,15 +333,61 @@ def create_playlist():
             except Exception as e:
                 print(f"Error adding track {search_query}: {str(e)}")
                 failed_transfers += 1
-                time.sleep(2)  # Wait longer after an error
+                time.sleep(2)
                 
+        # Update final status
+        transfer_status[playlist_id]['complete'] = True
         print(f"Transfer complete. Success: {successful_transfers}, Failed: {failed_transfers}")
+        
+    except Exception as e:
+        print(f"Background process error: {str(e)}")
+        transfer_status[playlist_id] = {
+            'error': str(e),
+            'complete': True
+        }
+
+@app.route('/create_playlist', methods=['GET', 'POST'])
+def create_playlist():
+    if 'credentials' not in session:
+        return jsonify({'redirect': '/login'})
+        
+    try:
+        # Get tracks from Spotify
+        spotify_url = request.form['spotify_url']
+        tracks = get_spotify_playlist_tracks(spotify_url)
+        
+        if not tracks:
+            return jsonify({'error': 'No tracks found'})
+            
+        # Initialize YTMusic and create playlist
+        credentials = Credentials(**session['credentials'])
+        auth = {
+            'Authorization': f'Bearer {credentials.token}'
+        }
+        ytmusic = YTMusic(auth=auth)
+        
+        playlist_name = f"Spotify Import - {time.strftime('%Y-%m-%d %H:%M')}"
+        playlist_id = ytmusic.create_playlist(playlist_name, "Imported from Spotify")
+        
+        # Start background process
+        transfer_status[playlist_id] = {
+            'current': 0,
+            'total': len(tracks),
+            'successful': 0,
+            'failed': 0,
+            'complete': False
+        }
+        
+        thread = threading.Thread(
+            target=process_playlist_in_background,
+            args=(playlist_id, tracks, credentials.token)
+        )
+        thread.start()
+        
         return jsonify({
             'success': True,
-            'message': 'Transfer complete!',
-            'playlist_id': playlist_id,
-            'successful': successful_transfers,
-            'failed': failed_transfers
+            'message': 'Transfer started',
+            'playlist_id': playlist_id
         })
         
     except Exception as e:
@@ -373,6 +396,17 @@ def create_playlist():
             session.pop('credentials', None)
             return jsonify({'redirect': '/login'})
         return jsonify({'error': str(e)})
+
+@app.route('/transfer_status/<playlist_id>')
+def get_transfer_status(playlist_id):
+    status = transfer_status.get(playlist_id, {
+        'current': 0,
+        'total': 0,
+        'successful': 0,
+        'failed': 0,
+        'complete': False
+    })
+    return jsonify(status)
 
 @app.route('/progress/<playlist_id>')
 def get_progress(playlist_id):

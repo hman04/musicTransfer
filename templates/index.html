@@ -151,8 +151,8 @@
             const confirmMessage = 
                 "Important:\n\n" +
                 "1. The transfer will start now\n" +
-                "2. Please keep this window open\n" +
-                "3. This may take several minutes\n\n" +
+                "2. This may take several minutes\n" +
+                "3. You can close this window - the transfer will continue\n\n" +
                 "Would you like to continue?";
                 
             if (!confirm(confirmMessage)) {
@@ -161,7 +161,7 @@
             
             // Show loading state
             document.getElementById('createPlaylistBtn').disabled = true;
-            document.getElementById('createPlaylistBtn').textContent = 'Transferring...';
+            document.getElementById('createPlaylistBtn').textContent = 'Starting transfer...';
             
             fetch('/create_playlist', {
                 method: 'POST',
@@ -179,26 +179,42 @@
                 
                 if (data.error) {
                     alert('Error: ' + data.error);
+                    document.getElementById('createPlaylistBtn').disabled = false;
+                    document.getElementById('createPlaylistBtn').textContent = 'Create YouTube Music Playlist';
                     return;
                 }
                 
-                // Show completion message
-                alert(
-                    `Transfer complete!\n\n` +
-                    `Successfully transferred: ${data.successful} tracks\n` +
-                    `Failed to transfer: ${data.failed} tracks\n\n` +
-                    `Check your YouTube Music playlists!`
-                );
-                
-                // Reset button
-                document.getElementById('createPlaylistBtn').disabled = false;
-                document.getElementById('createPlaylistBtn').textContent = 'Create YouTube Music Playlist';
+                // Start checking status
+                checkTransferStatus(data.playlist_id);
             })
             .catch(error => {
                 alert('Error: ' + error);
-                // Reset button
                 document.getElementById('createPlaylistBtn').disabled = false;
                 document.getElementById('createPlaylistBtn').textContent = 'Create YouTube Music Playlist';
+            });
+        }
+
+        function checkTransferStatus(playlistId) {
+            fetch(`/transfer_status/${playlistId}`)
+            .then(response => response.json())
+            .then(status => {
+                const progress = status.current / status.total * 100;
+                document.getElementById('createPlaylistBtn').textContent = 
+                    `Transferring... ${Math.round(progress)}% (${status.successful} done)`;
+                    
+                if (status.complete) {
+                    document.getElementById('createPlaylistBtn').disabled = false;
+                    document.getElementById('createPlaylistBtn').textContent = 'Create YouTube Music Playlist';
+                    alert(
+                        `Transfer complete!\n\n` +
+                        `Successfully transferred: ${status.successful} tracks\n` +
+                        `Failed to transfer: ${status.failed} tracks\n\n` +
+                        `Check your YouTube Music playlists!`
+                    );
+                } else {
+                    // Check again in 2 seconds
+                    setTimeout(() => checkTransferStatus(playlistId), 2000);
+                }
             });
         }
     </script>
