@@ -1,8 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Spotify to YouTube Music Transfer</title>
+    
+    <!-- Mobile icons -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    
+    <!-- Mobile-friendly CSS -->
     <style>
+        @media (max-width: 768px) {
+            .container {
+                width: 95%;
+                padding: 10px;
+            }
+            
+            input[type="text"] {
+                width: 100%;
+                font-size: 16px; /* Prevents zoom on iOS */
+                padding: 10px;
+            }
+            
+            button {
+                width: 100%;
+                padding: 15px;
+                margin: 10px 0;
+                font-size: 16px;
+            }
+        }
         .results {
             margin-top: 20px;
             padding: 20px;
@@ -200,20 +227,23 @@
             .then(status => {
                 const progress = status.current / status.total * 100;
                 document.getElementById('createPlaylistBtn').textContent = 
-                    `Transferring... ${Math.round(progress)}% (${status.successful} done)`;
+                    `Transferring... ${Math.round(progress)}% (${status.successful} transferred)`;
                     
                 if (status.complete) {
                     document.getElementById('createPlaylistBtn').disabled = false;
                     document.getElementById('createPlaylistBtn').textContent = 'Create YouTube Music Playlist';
-                    alert(
-                        `Transfer complete!\n\n` +
-                        `Successfully transferred: ${status.successful} tracks\n` +
-                        `Failed to transfer: ${status.failed} tracks\n\n` +
-                        `Check your YouTube Music playlists!`
-                    );
+                    
+                    const message = status.error 
+                        ? `Error: ${status.error}` 
+                        : `Transfer complete!\n\n` +
+                          `Successfully transferred: ${status.successful} tracks\n` +
+                          `Failed to transfer: ${status.failed} tracks\n\n` +
+                          `Check your YouTube Music playlists!`;
+                          
+                    alert(message);
                 } else {
-                    // Check again in 2 seconds
-                    setTimeout(() => checkTransferStatus(playlistId), 2000);
+                    // Check more frequently (every second)
+                    setTimeout(() => checkTransferStatus(playlistId), 1000);
                 }
             });
         }

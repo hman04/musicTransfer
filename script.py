@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_from_directory
 from bs4 import BeautifulSoup
 import requests
 from ytmusicapi import YTMusic
@@ -14,9 +14,25 @@ import os
 from celery_worker import process_playlist
 from redis import Redis
 from celery import Celery
+import concurrent.futures
+from functools import lru_cache
+import asyncio
+import aiohttp
+from collections import defaultdict
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_caching import Cache
+import redis
+from datetime import timedelta
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7)
+)
 
 # Spotify API credentials
 CLIENT_ID = 'c8602cd477be4b759815de3b72ac484a'
@@ -39,11 +55,34 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Only for development
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
 
 # Initialize Redis and Celery with the URL
-redis_client = Redis.from_url(REDIS_URL)
+redis_client = redis.from_url(REDIS_URL)
 celery = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL)
 
 # Global dictionary to store transfer status
 transfer_status = {}
+
+# Cache for search results
+@lru_cache(maxsize=1000)
+def cached_search(query):
+    return query
+
+# Track successful matches for smart searching
+song_patterns = defaultdict(int)
+
+# Configure Flask caching
+cache = Cache(config={
+    'CACHE_TYPE': 'redis',
+    'CACHE_REDIS_URL': REDIS_URL
+})
+cache.init_app(app)
+
+# Configure rate limiting
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    storage_uri=REDIS_URL,
+    default_limits=["200 per day", "50 per hour"]
+)
 
 class SpotifyScraperException(Exception):
     pass
@@ -67,6 +106,7 @@ def get_spotify_access_token():
     print(f"Got Spotify access token: {token[:10]}...")  # Debug log
     return token
 
+@cache.memoize(timeout=300)  # Cache for 5 minutes
 def get_spotify_playlist_tracks(playlist_url):
     """Get tracks from Spotify playlist using official API."""
     try:
@@ -159,6 +199,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/transfer', methods=['POST'])
+@limiter.limit("5 per minute")  # Limit preview requests
 def transfer():
     spotify_url = request.form['spotify_url']
     print(f"Processing URL: {spotify_url}")
@@ -295,49 +336,102 @@ def oauth2callback():
 
 def process_playlist_in_background(playlist_id, tracks, auth_token):
     try:
-        # Initialize YTMusic
         auth = {
             'Authorization': f'Bearer {auth_token}'
         }
         ytmusic = YTMusic(auth=auth)
-        
         successful_transfers = 0
         failed_transfers = 0
+        video_ids_batch = []
         
-        for track in tracks:
+        def search_track(track):
             try:
-                search_query = f"{track['name']} {' '.join(track['artists'])}"
-                print(f"Searching for: {search_query}")
-                search_results = ytmusic.search(search_query, filter="songs")
+                # Try different search patterns based on success rate
+                search_patterns = [
+                    f"{track['name']} {' '.join(track['artists'])}",  # Full search
+                    f"{track['name']} {track['artists'][0]}",         # First artist only
+                    f"\"{track['name']}\" {track['artists'][0]}",     # Exact title match
+                    f"{track['name']} official audio {track['artists'][0]}"  # With "official audio"
+                ]
                 
-                if search_results:
-                    video_id = search_results[0]['videoId']
-                    print(f"Adding track: {search_query} ({video_id})")
-                    ytmusic.add_playlist_items(playlist_id, [video_id])
-                    successful_transfers += 1
+                for pattern in search_patterns:
+                    cached_query = cached_search(pattern)
+                    results = ytmusic.search(cached_query, filter="songs", limit=1)
                     
-                    # Update status
-                    transfer_status[playlist_id] = {
-                        'current': successful_transfers + failed_transfers,
-                        'total': len(tracks),
-                        'successful': successful_transfers,
-                        'failed': failed_transfers,
-                        'complete': False
-                    }
-                    
-                    time.sleep(1)  # Avoid rate limiting
-                else:
-                    print(f"No results found for: {search_query}")
-                    failed_transfers += 1
-                    
+                    if results:
+                        video_id = results[0]['videoId']
+                        # Verify the match
+                        title = results[0].get('title', '').lower()
+                        artists = [a.get('name', '').lower() for a in results[0].get('artists', [])]
+                        
+                        if (track['name'].lower() in title or 
+                            any(artist.lower() in ' '.join(artists) for artist in track['artists'])):
+                            song_patterns[pattern.split()[0]] += 1
+                            return video_id
+                            
+                    time.sleep(0.1)  # Minimal delay between attempts
+                
+                return None
+                
             except Exception as e:
-                print(f"Error adding track {search_query}: {str(e)}")
-                failed_transfers += 1
-                time.sleep(2)
+                print(f"Search error for {track['name']}: {str(e)}")
+                return None
+        
+        # Process tracks in larger batches with parallel search
+        batch_size = 10  # Increased batch size
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            for i in range(0, len(tracks), batch_size):
+                batch = tracks[i:i + batch_size]
                 
-        # Update final status
-        transfer_status[playlist_id]['complete'] = True
-        print(f"Transfer complete. Success: {successful_transfers}, Failed: {failed_transfers}")
+                # Parallel search for batch
+                future_to_track = {executor.submit(search_track, track): track for track in batch}
+                
+                batch_video_ids = []
+                for future in concurrent.futures.as_completed(future_to_track):
+                    track = future_to_track[future]
+                    try:
+                        video_id = future.result()
+                        if video_id:
+                            batch_video_ids.append(video_id)
+                            successful_transfers += 1
+                        else:
+                            failed_transfers += 1
+                            print(f"No match found for: {track['name']}")
+                    except Exception as e:
+                        failed_transfers += 1
+                        print(f"Error processing {track['name']}: {str(e)}")
+                
+                # Add batch to playlist
+                if batch_video_ids:
+                    try:
+                        ytmusic.add_playlist_items(playlist_id, batch_video_ids)
+                        time.sleep(0.2)  # Minimal delay between batches
+                    except Exception as e:
+                        print(f"Batch add error: {str(e)}")
+                        # Retry individual tracks on batch failure
+                        for video_id in batch_video_ids:
+                            try:
+                                ytmusic.add_playlist_items(playlist_id, [video_id])
+                                time.sleep(0.1)
+                            except:
+                                failed_transfers += 1
+                                successful_transfers -= 1
+                
+                # Update progress
+                transfer_status[playlist_id] = {
+                    'current': successful_transfers + failed_transfers,
+                    'total': len(tracks),
+                    'successful': successful_transfers,
+                    'failed': failed_transfers,
+                    'complete': False,
+                    'progress': f"{successful_transfers}/{len(tracks)} tracks transferred"
+                }
+        
+        # Final status update
+        transfer_status[playlist_id].update({
+            'complete': True,
+            'final_message': f"Completed! {successful_transfers} tracks transferred successfully."
+        })
         
     except Exception as e:
         print(f"Background process error: {str(e)}")
@@ -347,6 +441,7 @@ def process_playlist_in_background(playlist_id, tracks, auth_token):
         }
 
 @app.route('/create_playlist', methods=['GET', 'POST'])
+@limiter.limit("3 per minute")  # Limit playlist creation
 def create_playlist():
     if 'credentials' not in session:
         return jsonify({'redirect': '/login'})
@@ -404,7 +499,8 @@ def get_transfer_status(playlist_id):
         'total': 0,
         'successful': 0,
         'failed': 0,
-        'complete': False
+        'complete': False,
+        'progress': 'Starting transfer...'
     })
     return jsonify(status)
 
@@ -414,6 +510,43 @@ def get_progress(playlist_id):
     if progress_data:
         return jsonify(json.loads(progress_data))
     return jsonify({'status': 'No progress data available'})
+
+# Add health check endpoint
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy'})
+
+# Add error handlers
+@app.errorhandler(429)  # Rate limit exceeded
+def ratelimit_handler(e):
+    return jsonify({
+        'error': 'Rate limit exceeded',
+        'message': 'Please wait a few minutes and try again'
+    }), 429
+
+@app.errorhandler(500)
+def internal_error(e):
+    return jsonify({
+        'error': 'Internal server error',
+        'message': 'Please try again later'
+    }), 500
+
+# Add favicon and mobile icon routes
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(
+        os.path.join(app.root_path, 'static'),
+        'favicon.ico',
+        mimetype='image/vnd.microsoft.icon'
+    )
+
+@app.route('/apple-touch-icon.png')
+def apple_touch_icon():
+    return send_from_directory(
+        os.path.join(app.root_path, 'static'),
+        'apple-touch-icon.png',
+        mimetype='image/png'
+    )
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

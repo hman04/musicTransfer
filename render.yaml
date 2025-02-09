@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: musictransfer
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn script:app --workers 4 --threads 2
+    scaling:
+      minInstances: 2
+      maxInstances: 10
+      targetMemoryPercent: 80
+      targetCPUPercent: 80
+    healthCheckPath: /health
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          name: music-transfer-redis
+          type: redis
+          property: connectionString
+
+  - type: redis
+    name: music-transfer-redis
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: everywhere
+    plan: starter 
