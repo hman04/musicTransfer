@@ -2,8 +2,8 @@ services:
   - type: web
     name: musictransfer
     env: node
-    buildCommand: cd frontend-new && npm install && npm run build
-    startCommand: cd frontend-new && npm run start
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm run start
     envVars:
       - key: NODE_ENV
         value: production
@@ -11,10 +11,10 @@ services:
         value: https://music-transfer-backend.onrender.com
     buildFilter:
       paths:
-        - frontend-new/**/*
+        - frontend/**/*
     disk:
       name: next-cache
-      mountPath: /opt/render/project/src/frontend-new/.next/cache
+      mountPath: /opt/render/project/src/frontend/.next/cache
       sizeGB: 1
 
   - type: web
