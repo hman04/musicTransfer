@@ -12,7 +12,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 import os
 from celery_worker import process_playlist
-import redis
+from redis import Redis
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
@@ -34,8 +34,9 @@ SCOPES = [
 ]
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Only for development
 
-# Initialize Redis
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+# Initialize Redis with URL from environment
+redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+redis_client = Redis.from_url(redis_url)
 
 class SpotifyScraperException(Exception):
     pass
