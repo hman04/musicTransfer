@@ -2,8 +2,17 @@ services:
   - type: web
     name: musictransfer
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn script:app --workers 4 --threads 2
+    buildCommand: |
+      pip install -r requirements.txt
+      cd frontend && npm install && npm run build
+    startCommand: |
+      cd frontend && npm run build
+      gunicorn script:app
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.9.0
     scaling:
       minInstances: 2
       maxInstances: 10
