@@ -150,32 +150,28 @@
             
             const confirmMessage = 
                 "Important:\n\n" +
-                "1. This process will take 15-30 minutes for 1922 songs\n" +
-                "2. Please keep this window open until completion\n" +
-                "3. Closing the window will interrupt the transfer\n\n" +
+                "1. The transfer will start now\n" +
+                "2. Please keep this window open\n" +
+                "3. This may take several minutes\n\n" +
                 "Would you like to continue?";
                 
             if (!confirm(confirmMessage)) {
                 return;
             }
             
-            // Show progress container
-            document.getElementById('progressContainer').style.display = 'block';
-            
-            // Start progress updates
-            progressInterval = setInterval(updateProgress, 1000);
+            // Show loading state
+            document.getElementById('createPlaylistBtn').disabled = true;
+            document.getElementById('createPlaylistBtn').textContent = 'Transferring...';
             
             fetch('/create_playlist', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: 'spotify_url=' + encodeURIComponent(currentSpotifyUrl)
+                body: `spotify_url=${encodeURIComponent(currentSpotifyUrl)}`
             })
             .then(response => response.json())
             .then(data => {
-                clearInterval(progressInterval);
-                
                 if (data.redirect) {
                     window.location.href = data.redirect;
                     return;
@@ -186,17 +182,23 @@
                     return;
                 }
                 
+                // Show completion message
                 alert(
-                    `Playlist "${data.details.playlist_name}" created successfully!\n\n` +
-                    `✓ Successfully transferred: ${data.details.successful_transfers} tracks\n` +
-                    `✗ Failed to transfer: ${data.details.failed_transfers} tracks\n` +
-                    `Total tracks processed: ${data.details.total_tracks}\n\n` +
-                    `Check your YouTube Music playlists to see the imported songs!`
+                    `Transfer complete!\n\n` +
+                    `Successfully transferred: ${data.successful} tracks\n` +
+                    `Failed to transfer: ${data.failed} tracks\n\n` +
+                    `Check your YouTube Music playlists!`
                 );
+                
+                // Reset button
+                document.getElementById('createPlaylistBtn').disabled = false;
+                document.getElementById('createPlaylistBtn').textContent = 'Create YouTube Music Playlist';
             })
             .catch(error => {
-                clearInterval(progressInterval);
                 alert('Error: ' + error);
+                // Reset button
+                document.getElementById('createPlaylistBtn').disabled = false;
+                document.getElementById('createPlaylistBtn').textContent = 'Create YouTube Music Playlist';
             });
         }
     </script>
