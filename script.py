@@ -346,31 +346,21 @@ def process_playlist_in_background(playlist_id, tracks, auth_token):
         
         def search_track(track):
             try:
-                # Try different search patterns based on success rate
+                # Try different search patterns
                 search_patterns = [
                     f"{track['name']} {' '.join(track['artists'])}",  # Full search
                     f"{track['name']} {track['artists'][0]}",         # First artist only
-                    f"\"{track['name']}\" {track['artists'][0]}",     # Exact title match
-                    f"{track['name']} official audio {track['artists'][0]}"  # With "official audio"
+                    track['name'],                                    # Just the song name
+                    f"{track['name']} audio",                         # With "audio" keyword
+                    f"{track['name']} official"                       # With "official" keyword
                 ]
                 
                 for pattern in search_patterns:
-                    cached_query = cached_search(pattern)
-                    results = ytmusic.search(cached_query, filter="songs", limit=1)
-                    
+                    results = ytmusic.search(pattern, filter="songs", limit=1)
                     if results:
-                        video_id = results[0]['videoId']
-                        # Verify the match
-                        title = results[0].get('title', '').lower()
-                        artists = [a.get('name', '').lower() for a in results[0].get('artists', [])]
-                        
-                        if (track['name'].lower() in title or 
-                            any(artist.lower() in ' '.join(artists) for artist in track['artists'])):
-                            song_patterns[pattern.split()[0]] += 1
-                            return video_id
-                            
-                    time.sleep(0.1)  # Minimal delay between attempts
+                        return results[0]['videoId']
                 
+                print(f"No match found for: {track['name']} by {', '.join(track['artists'])}")
                 return None
                 
             except Exception as e:
