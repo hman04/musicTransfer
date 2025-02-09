@@ -245,27 +245,17 @@
             fetch(`/transfer_status/${playlistId}`)
             .then(response => response.json())
             .then(status => {
-                const progress = status.current / status.total * 100;
+                const progress = status.total > 0 ? Math.round((status.current / status.total) * 100) : 0;
+                const successful = status.successful || 0;
+                
                 document.getElementById('createPlaylistBtn').textContent = 
-                    `Transferring... ${Math.round(progress)}% (${status.successful} transferred)`;
+                    `Transferring... ${progress}% (${successful} transferred)`;
                     
-                if (status.complete) {
-                    document.getElementById('createPlaylistBtn').disabled = false;
-                    document.getElementById('createPlaylistBtn').textContent = 'Create YouTube Music Playlist';
-                    
-                    const message = status.error 
-                        ? `Error: ${status.error}` 
-                        : `Transfer complete!\n\n` +
-                          `Successfully transferred: ${status.successful} tracks\n` +
-                          `Failed to transfer: ${status.failed} tracks\n\n` +
-                          `Check your YouTube Music playlists!`;
-                          
-                    alert(message);
-                } else {
-                    // Check more frequently (every second)
-                    setTimeout(() => checkTransferStatus(playlistId), 1000);
+                if (!status.complete) {
+                    setTimeout(() => checkTransferStatus(playlistId), 2000);  // Check every 2 seconds
                 }
-            });
+            })
+            .catch(error => console.error('Error:', error));
         }
     </script>
 </body>

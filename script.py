@@ -493,15 +493,21 @@ def create_playlist():
         return jsonify({'error': str(e)})
 
 @app.route('/transfer_status/<playlist_id>')
+@limiter.exempt
 def get_transfer_status(playlist_id):
     status = transfer_status.get(playlist_id, {
         'current': 0,
         'total': 0,
         'successful': 0,
         'failed': 0,
-        'complete': False,
-        'progress': 'Starting transfer...'
+        'complete': False
     })
+    
+    # Ensure we have numbers for calculations
+    status['current'] = int(status.get('current', 0))
+    status['total'] = int(status.get('total', 0))
+    status['successful'] = int(status.get('successful', 0))
+    
     return jsonify(status)
 
 @app.route('/progress/<playlist_id>')
