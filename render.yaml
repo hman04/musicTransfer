@@ -1,30 +1,30 @@
 services:
   - type: web
     name: musictransfer
-    env: python
-    buildCommand: |
-      pip install -r requirements.txt
-      cd frontend && npm install && npm run build
-    startCommand: |
-      cd frontend && npm run build
-      gunicorn script:app
+    env: node
+    buildCommand: cd frontend-new && npm install && npm run build
+    startCommand: cd frontend-new && npm run start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NEXT_PUBLIC_BACKEND_URL
+        value: https://music-transfer-backend.onrender.com
+    buildFilter:
+      paths:
+        - frontend-new/**/*
+    disk:
+      name: next-cache
+      mountPath: /opt/render/project/src/frontend-new/.next/cache
+      sizeGB: 1
+
+  - type: web
+    name: music-transfer-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python script.py
+    envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
-    scaling:
-      minInstances: 2
-      maxInstances: 10
-      targetMemoryPercent: 80
-      targetCPUPercent: 80
-    healthCheckPath: /health
-    envVars:
-      - key: REDIS_URL
-        fromService:
-          name: music-transfer-redis
-          type: redis
-          property: connectionString
 
   - type: redis
     name: music-transfer-redis
@@ -32,17 +32,3 @@ services:
       - source: 0.0.0.0/0
         description: everywhere
     plan: starter
-
-  - type: web
-    name: musictransfer-frontend
-    env: node
-    buildCommand: npm install && npm run build
-    startCommand: npm start
-    envVars:
-      - key: NODE_ENV
-        value: production
-    scaling:
-      minInstances: 1
-      maxInstances: 3
-      targetMemoryPercent: 80
-      targetCPUPercent: 80 
