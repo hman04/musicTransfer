@@ -38,7 +38,7 @@ export default function Home() {
 
     setIsLoading(true)
     try {
-      const response = await fetch('http://localhost:5001/transfer', {
+      const response = await fetch('https://musictransfer.onrender.com/transfer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `spotify_url=${encodeURIComponent(url)}`
