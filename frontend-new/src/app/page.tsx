@@ -18,6 +18,10 @@ import {
 import { useState } from 'react'
 import { FaSpotify, FaYoutube } from 'react-icons/fa'
 
+const BACKEND_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://musictransfer.onrender.com' 
+  : 'http://localhost:5001'
+
 export default function Home() {
   const [url, setUrl] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -38,7 +42,7 @@ export default function Home() {
 
     setIsLoading(true)
     try {
-      const response = await fetch('https://musictransfer.onrender.com/transfer', {
+      const response = await fetch(`${BACKEND_URL}/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `spotify_url=${encodeURIComponent(url)}`
