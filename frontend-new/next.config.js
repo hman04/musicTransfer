@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  poweredByHeader: false,
+  compress: true,
   async rewrites() {
     return [
       {
@@ -8,6 +10,10 @@ const nextConfig = {
         destination: `${process.env.NEXT_PUBLIC_BACKEND_URL}/:path*`
       }
     ]
+  },
+  experimental: {
+    optimizeCss: true,
+    optimizePackageImports: ['@chakra-ui/react']
   }
 }
 
