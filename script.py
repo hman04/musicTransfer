@@ -301,45 +301,74 @@ def create_playlist():
         return jsonify({'redirect': '/login'})
         
     try:
-        print("Starting playlist creation...")  # Debug log
+        print("Starting playlist creation...")
         
         # Get the tracks from Spotify
         spotify_url = request.form['spotify_url']
         tracks = get_spotify_playlist_tracks(spotify_url)
         
         if not tracks:
-            print("No tracks found in Spotify playlist")  # Debug log
             return jsonify({'error': 'No tracks found'})
+            
+        print(f"Found {len(tracks)} tracks in Spotify playlist")
         
-        print(f"Found {len(tracks)} tracks in Spotify playlist")  # Debug log
-        
-        # Initialize YTMusic with OAuth credentials
+        # Initialize YTMusic with proper OAuth
         credentials = Credentials(**session['credentials'])
         headers = {
-            'authorization': f'Bearer {credentials.token}',
-            'accept': 'application/json'
+            'Authorization': f'Bearer {credentials.token}',
+            'accept': 'application/json',
+            'Content-Type': 'application/json'
         }
-        ytmusic = YTMusic(auth=headers)
-        print("YTMusic initialized successfully")  # Debug log
         
-        # Create a new playlist
-        playlist_name = f"Spotify Import - {len(tracks)} tracks"
+        # Create auth object for YTMusic
+        auth = {
+            'Authorization': f'Bearer {credentials.token}'
+        }
+        ytmusic = YTMusic(auth=auth)
+        print("YTMusic initialized successfully")
+        
+        # Create playlist
+        playlist_name = f"Spotify Import - {time.strftime('%Y-%m-%d %H:%M')}"
         playlist_description = "Imported from Spotify"
         playlist_id = ytmusic.create_playlist(playlist_name, playlist_description)
-        print(f"Created YouTube Music playlist: {playlist_id}")  # Debug log
+        print(f"Created playlist: {playlist_id}")
         
-        # Start background task
-        process_playlist.delay(playlist_id, tracks, headers)
-        print("Background task started")  # Debug log
+        # Add tracks
+        successful_transfers = 0
+        failed_transfers = 0
         
+        for track in tracks:
+            try:
+                search_query = f"{track['name']} {' '.join(track['artists'])}"
+                print(f"Searching for: {search_query}")
+                search_results = ytmusic.search(search_query, filter="songs")
+                
+                if search_results:
+                    video_id = search_results[0]['videoId']
+                    print(f"Adding track: {search_query} ({video_id})")
+                    ytmusic.add_playlist_items(playlist_id, [video_id])
+                    successful_transfers += 1
+                    time.sleep(1)  # Avoid rate limiting
+                else:
+                    print(f"No results found for: {search_query}")
+                    failed_transfers += 1
+                    
+            except Exception as e:
+                print(f"Error adding track {search_query}: {str(e)}")
+                failed_transfers += 1
+                time.sleep(2)  # Wait longer after an error
+                
+        print(f"Transfer complete. Success: {successful_transfers}, Failed: {failed_transfers}")
         return jsonify({
             'success': True,
-            'message': 'Transfer started!',
-            'playlist_id': playlist_id
+            'message': 'Transfer complete!',
+            'playlist_id': playlist_id,
+            'successful': successful_transfers,
+            'failed': failed_transfers
         })
         
     except Exception as e:
-        print(f"Error in create_playlist: {str(e)}")  # Debug log
+        print(f"Error in create_playlist: {str(e)}")
         if 'unauthorized' in str(e).lower():
             session.pop('credentials', None)
             return jsonify({'redirect': '/login'})
